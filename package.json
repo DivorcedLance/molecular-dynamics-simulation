@@ -13,12 +13,18 @@
     "@react-three/drei": "^9.117.3",
     "@react-three/fiber": "^8.17.10",
     "molecular-dynamics-simulation": "file:",
+    "parallel": "^1.2.0",
+    "paralleljs": "^1.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "three": "^0.170.0"
+    "threads": "^1.7.0",
+    "three": "^0.170.0",
+    "uuid": "^11.0.3"
   },
   "devDependencies": {
     "@eslint/js": "^9.13.0",
+    "@types/node": "^22.9.1",
+    "@types/paralleljs": "^0.0.24",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",

@@ -1,8 +1,10 @@
 import * as THREE from 'three';
+import { v4 as uuidv4 } from 'uuid'; // Usaremos UUID para generar IDs únicos
 
 // src/models/Atom.ts
 
 export class Atom {
+    id: string;
     position: THREE.Vector3;
     velocity: THREE.Vector3;
     mass: number;
@@ -12,6 +14,7 @@ export class Atom {
     originalColor: string; // Color original del átomo
 
     constructor(position = new THREE.Vector3(), velocity = new THREE.Vector3(), mass = 1, color = '#ffffff') {
+        this.id = uuidv4(); // Generar un ID único
         this.position = position;
         this.velocity = velocity;
         this.mass = mass;
@@ -39,7 +42,7 @@ export class Atom {
     }
 
     // Método para actualizar la posición y velocidad en cada paso del tiempo
-    update(deltaTime: number) {
+    updateByDelta(deltaTime: number) {
         // Calcular aceleración
         const acceleration = this.force.clone().divideScalar(this.mass);
     
@@ -50,6 +53,17 @@ export class Atom {
         // Restablecer fuerza
         this.force.set(0, 0, 0);
     }
+
+    // Método para actualizar la posición y velocidad en cada paso del tiempo
+    update(globalForce = new THREE.Vector3(), localForce = new THREE.Vector3(), newColor = this.color, deltaTime = 0.016) {
+        const totalForce = globalForce.clone().add(localForce);
+        const acceleration = totalForce.clone().divideScalar(this.mass);
+    
+        this.velocity.add(acceleration.multiplyScalar(deltaTime));
+        this.position.add(this.velocity.clone().multiplyScalar(deltaTime));
+    
+        this.color = newColor;
+        }
 
     // Método para actualizar la lista de vecinos y sincronizar colores
     updateNeighborList(atoms: Atom[], cutoff: number) {
