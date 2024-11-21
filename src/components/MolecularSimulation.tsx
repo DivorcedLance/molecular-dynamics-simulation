@@ -51,12 +51,12 @@ const MolecularSimulation = () => {
             <div className='flex flex-col md:flex-row h-full'>
                 <div className='w-full h-1/2 md:w-1/2 md:h-full relative'>
                     <h1 className='absolute top-0 left-0 p-4 text-2xl bg-white/75 md:bg-transparent'>Parallel</h1>
-                    {/* <Canvas className="md:h-full">
+                    <Canvas className="md:h-full">
                         <ambientLight intensity={0.5} />
                         <pointLight position={[10, 10, 10]} />
                         <AtomsAnimationParallel isRunning={isRunning} atomCount={atomCount} seed={seed} config={config}/>
                         <OrbitControls />
-                    </Canvas> */}
+                    </Canvas>
                 </div>
 
                 <hr className='my-4 md:my-0 md:mx-4 border-black' />
