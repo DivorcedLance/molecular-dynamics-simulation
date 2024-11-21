@@ -23,7 +23,7 @@ const MolecularSimulation = () => {
 
     return (
         <div className='relative w-full h-full'>
-            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 p-4 z-10 flex gap-4 items-center">
+            <div className="absolute top-0 right-0 md:left-1/2 md:transform md:-translate-x-1/2 p-4 z-10 flex gap-4 items-center justify-center">
                 <button
                     className='flex items-center justify-center p-3 bg-black text-white rounded-full shadow-lg hover:bg-slate-600'
                     onClick={() => setIsRunning(!isRunning)}
@@ -39,7 +39,7 @@ const MolecularSimulation = () => {
                     max={150}
                     min={1}
                 />
-                
+
                 <button
                     className='flex items-center justify-center p-3 bg-black text-white rounded-full shadow-lg hover:bg-slate-600'
                     onClick={() => setSeed(generateRandomSeed())}
@@ -48,19 +48,22 @@ const MolecularSimulation = () => {
                 </button>
             </div>
 
-            <div className='flex gap-4 h-full'>
-                <div className='w-1/2'>
-                    <h1 className='absolute top-0 left-0 p-4 text-2xl'>Parallel</h1>
-                    <Canvas>
+            <div className='flex flex-col md:flex-row h-full'>
+                <div className='w-full h-1/2 md:w-1/2 md:h-full relative'>
+                    <h1 className='absolute top-0 left-0 p-4 text-2xl bg-white/75 md:bg-transparent'>Parallel</h1>
+                    <Canvas className="md:h-full">
                         <ambientLight intensity={0.5} />
                         <pointLight position={[10, 10, 10]} />
                         <AtomsAnimationParallel isRunning={isRunning} atomCount={atomCount} seed={seed} config={config}/>
                         <OrbitControls />
                     </Canvas>
                 </div>
-                <div className='w-1/2'>
-                    <h1 className='absolute top-0 right-0 p-4 text-2xl'>Sequential</h1>
-                    <Canvas>
+
+                <hr className='my-4 md:my-0 md:mx-4 border-black' />
+
+                <div className='w-full h-1/2 md:w-1/2 md:h-full relative'>
+                    <h1 className='absolute top-0 lg:left-0 md:right-0 p-4 text-2xl bg-white/75 md:bg-transparent'>Sequential</h1>
+                    <Canvas className="md:h-full">
                         <ambientLight intensity={0.5} />
                         <pointLight position={[10, 10, 10]} />
                         <AtomsAnimation isRunning={isRunning} atomCount={atomCount} seed={seed} config={config}/>
