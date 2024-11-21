@@ -8,13 +8,14 @@ import LocalForcesWorker from '../workers/localForcesWorker?worker';
 import ColorsWorker from '../workers/colorWorker?worker';
 import { createAtoms, updateAtomsParallel } from '../lib/atomFunctions';
 import AtomComponent from '../components/AtomComponent';
+import { Config } from '../types';
 
-const AtomsAnimationParallel = ({ isRunning, atomCount, seed }: { isRunning: boolean, atomCount: number, seed: number }) => {
+const AtomsAnimationParallel = ({ isRunning, atomCount, config, seed }: { isRunning: boolean, atomCount: number, config: Config, seed: number }) => {
 
-    const cutoff = 0.5; // Radio de vecinos
-    const springConstant = 0.5; // Constante del resorte
-    const rotationalConstant = 0.1; // Constante rotacional
-    const G = 6.67430e4; // Constante gravitacional
+    const cutoff = config.cutoff; // Distancia de corte
+    const springConstant = config.springConstant; // Constante de resorte
+    const rotationalConstant = config.rotationalConstant; // Constante de rotación
+    const G = config.G; // Constante gravitacional
 
     const [atoms, setAtoms] = useState<Atom[]>([]);
     const gravitationalWorkerRef = useRef<Worker | null>(null);

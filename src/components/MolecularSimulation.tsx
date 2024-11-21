@@ -11,6 +11,12 @@ const MolecularSimulation = () => {
     const [isRunning, setIsRunning] = useState(false);
     const [atomCount, setAtomCount] = useState(50);
     const [seed] = useState(generateRandomSeed());
+    const [config] = useState({
+        "cutoff": 0.5,
+        "springConstant": 0.5,
+        "rotationalConstant": 0.1,
+        "G": 6.67430e3
+    });
 
     return (
         <div className='relative w-full h-full'>
@@ -34,7 +40,7 @@ const MolecularSimulation = () => {
                     <Canvas>
                         <ambientLight intensity={0.5} />
                         <pointLight position={[10, 10, 10]} />
-                        <AtomsAnimationParallel isRunning={isRunning} atomCount={atomCount} seed={seed} />
+                        <AtomsAnimationParallel isRunning={isRunning} atomCount={atomCount} seed={seed} config={config}/>
                         <OrbitControls />
                     </Canvas>
                 </div>
@@ -43,7 +49,7 @@ const MolecularSimulation = () => {
                     <Canvas>
                         <ambientLight intensity={0.5} />
                         <pointLight position={[10, 10, 10]} />
-                        <AtomsAnimation isRunning={isRunning} atomCount={atomCount} seed={seed}/>
+                        <AtomsAnimation isRunning={isRunning} atomCount={atomCount} seed={seed} config={config}/>
                         <OrbitControls />
                     </Canvas>
                 </div>
