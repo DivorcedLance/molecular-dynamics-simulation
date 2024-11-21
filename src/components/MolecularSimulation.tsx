@@ -23,6 +23,9 @@ const MolecularSimulation = () => {
                     value={atomCount}
                     onChange={(e) => setAtomCount(parseInt(e.target.value))}
                     className='border-black text-center text-4xl w-24'
+                    // max min
+                    max={150}
+                    min={1}
                 />
             </div>
             <div className='flex gap-4 h-full'>
