@@ -30,7 +30,7 @@ const AtomComponent = ({ atom }: { atom: Atom }) => {
     return (
         <>
             <mesh ref={meshRef}>
-                <sphereGeometry args={[0.1, 16, 16]} />
+                <sphereGeometry args={[0.1, 32, 32]} />
                 <meshStandardMaterial color={atom.color} />
             </mesh>
         </>

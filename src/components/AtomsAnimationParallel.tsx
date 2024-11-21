@@ -1,31 +1,26 @@
 import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
+import { AtomAnimationConfig } from '../types';
 import { Atom } from '../models/Atom';
-import * as THREE from 'three';
+import { createAtoms, updateAtomsParallel } from '../lib/atomFunctions';
+import AtomComponent from '../components/AtomComponent';
+
 import GravitationalWorker from '../workers/gravitationalWorker?worker';
 import NeighborsWorker from '../workers/neighborsWorker?worker';
 import LocalForcesWorker from '../workers/localForcesWorker?worker';
 import ColorsWorker from '../workers/colorWorker?worker';
-import { createAtoms, updateAtomsParallel } from '../lib/atomFunctions';
-import AtomComponent from '../components/AtomComponent';
-import { Config } from '../types';
 
-const AtomsAnimationParallel = ({ isRunning, atomCount, config, seed }: { isRunning: boolean, atomCount: number, config: Config, seed: number }) => {
-
-    const cutoff = config.cutoff; // Distancia de corte
-    const springConstant = config.springConstant; // Constante de resorte
-    const rotationalConstant = config.rotationalConstant; // Constante de rotación
-    const G = config.G; // Constante gravitacional
-
+const AtomsAnimationParallel = ({ isRunning, atomCount, seed, config }: { isRunning: boolean, atomCount: number, seed: number, config: AtomAnimationConfig }) => {
     const [atoms, setAtoms] = useState<Atom[]>([]);
+
     const gravitationalWorkerRef = useRef<Worker | null>(null);
     const neighborsWorkerRef = useRef<Worker | null>(null);
     const localForcesWorkerRef = useRef<Worker | null>(null);
     const colorsWorkerRef = useRef<Worker | null>(null);
 
     useEffect(() => {
-        setAtoms(createAtoms(atomCount, 4, 0.1, seed))
-    }, [atomCount, seed]);
+        setAtoms(createAtoms(atomCount, config.positionDispersion, config.velocityDispersion, seed))
+    }, [atomCount, config.positionDispersion, config.velocityDispersion, seed]);
 
     useEffect(() => {
         gravitationalWorkerRef.current = new GravitationalWorker();
@@ -44,88 +39,18 @@ const AtomsAnimationParallel = ({ isRunning, atomCount, config, seed }: { isRunn
     useFrame(({ clock }) => {
         if (isRunning) {
             const deltaTime = clock.getDelta();
-    
-            const atomData = atoms.map(atom => ({
-                id: atom.id,
-                position: [atom.position.x, atom.position.y, atom.position.z],
-                velocity: [atom.velocity.x, atom.velocity.y, atom.velocity.z],
-                mass: atom.mass,
-                originalColor: atom.originalColor,
-            }));
-    
-            const gravitationalPromise = new Promise<Map<string, THREE.Vector3>>((resolve) => {
-                gravitationalWorkerRef.current?.postMessage({ atoms: atomData, G });
-                gravitationalWorkerRef.current!.onmessage = ({ data }: MessageEvent) => {
-                    const forces = new Map(
-                        Object.entries(data as Record<string, [number, number, number]>).map(([id, force]) => [id, new THREE.Vector3(...force)])
-                    );
-                    resolve(forces);
-                };
-            });
-    
-            const neighborsPromise = new Promise<Map<string, Atom[]>>((resolve) => {
-                neighborsWorkerRef.current?.postMessage({ atoms: atomData, cutoff });
-                neighborsWorkerRef.current!.onmessage = ({ data }: MessageEvent) => {
-                    const neighbors = new Map(
-                        Object.entries(data).map(([id, neighborIds]) => [
-                            id,
-                            (neighborIds as string[]).map((neighborId: string) => atoms.find(atom => atom.id === neighborId)!),
-                        ])
-                    );
-                    resolve(neighbors);
-                };
-            });
-    
-            Promise.all([gravitationalPromise, neighborsPromise])
-                .then(([gravitationalForces, neighbors]) => {
-                    const neighborsData = Array.from(neighbors.entries()).map(([id, neighbors]) => ({
-                        id,
-                        neighbors: neighbors.map(neighbor => neighbor.id),
-                    }));
-    
-                    // Promesa para calcular fuerzas locales
-                    const localForcesPromise = new Promise<Map<string, THREE.Vector3>>((resolve) => {
-                        localForcesWorkerRef.current?.postMessage({
-                            atoms: atomData,
-                            neighbors: neighborsData,
-                            springConstant,
-                            rotationalConstant,
-                        });
-                        localForcesWorkerRef.current!.onmessage = ({ data }: MessageEvent) => {
-                            const forces = new Map(
-                                Object.entries(data as Record<string, [number, number, number]>).map(([id, force]) => [id, new THREE.Vector3(...force)])
-                            );
-                            resolve(forces);
-                        };
-                    });
-    
-                    // Promesa para calcular colores
-                    const colorsPromise = new Promise<Map<string, string>>((resolve) => {
-                        colorsWorkerRef.current?.postMessage({ atoms: atomData, neighbors: neighborsData });
-                        colorsWorkerRef.current!.onmessage = ({ data }: MessageEvent) => {
-                            const colors = new Map(
-                                Object.entries(data as Record<string, string>)
-                            );
-                            resolve(colors);
-                        };
-                    });
-    
-                    return Promise.all([localForcesPromise, colorsPromise]).then(([localForces, colors]) => ({
-                        gravitationalForces,
-                        localForces,
-                        colors,
-                    }));
-                })
-                .then(({ gravitationalForces, localForces, colors }) => {
-                    updateAtomsParallel(
-                        atoms,
-                        gravitationalForces,
-                        localForces,
-                        colors,
-                        deltaTime
-                    )
-                })
-                .catch(error => console.error('Simulation error:', error));
+            updateAtomsParallel(
+                atoms,
+                deltaTime,
+                config.cutoff,
+                config.springConstant,
+                config.rotationalConstant,
+                config.G,
+                gravitationalWorkerRef,
+                neighborsWorkerRef,
+                localForcesWorkerRef,
+                colorsWorkerRef
+            )
         }
     });
 

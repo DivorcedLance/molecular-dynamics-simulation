@@ -42,7 +42,7 @@ export function createAtoms(atomCount: number, positionDispersion: number, veloc
 }
 
 export function applyLongRangeForces(atoms: Atom[], G: number) {
-  const MIN_DISTANCE = 0.2; // Evitar singularidades
+  const MIN_DISTANCE = 0.2;
 
   for (let i = 0; i < atoms.length; i++) {
       for (let j = i + 1; j < atoms.length; j++) {
@@ -61,7 +61,14 @@ export function applyLongRangeForces(atoms: Atom[], G: number) {
   }
 }
 
-export function updateAtoms (atoms: Atom[], deltaTime: number, cutoff: number, springConstant: number, rotationalConstant: number, G: number) {
+export function updateAtomsSequential (
+  atoms: Atom[], 
+  deltaTime: number, 
+  cutoff: number, 
+  springConstant: number, 
+  rotationalConstant: number, 
+  G: number
+): void {
   // Calcular fuerzas globales (entre todos)
   applyLongRangeForces(atoms, G);
 
@@ -81,7 +88,7 @@ export function updateAtoms (atoms: Atom[], deltaTime: number, cutoff: number, s
 }
 
 // Actualizar posiciones y velocidades
-export function updateAtomsParallel(
+export function updateAtomsByForces(
   atoms: Atom[],
   globalForces: Map<string, THREE.Vector3>,
   localForces: Map<string, THREE.Vector3>,
@@ -93,6 +100,104 @@ export function updateAtomsParallel(
     const localForce = localForces.get(atom.id) || new THREE.Vector3();
     const newColor = colors.get(atom.id) || atom.color;
 
-    atom.update(globalForce, localForce, newColor, deltaTime);
+    atom.force.add(globalForce);
+    atom.force.add(localForce);
+    atom.color = newColor;
+    atom.updatePosVelByDelta(deltaTime);
   });
+}
+
+export function updateAtomsParallel(
+  atoms: Atom[],
+  deltaTime: number,
+  cutoff: number,
+  springConstant: number,
+  rotationalConstant: number,
+  G: number,
+  gravitationalWorkerRef: React.MutableRefObject<Worker | null>,
+  neighborsWorkerRef: React.MutableRefObject<Worker | null>,
+  localForcesWorkerRef: React.MutableRefObject<Worker | null>,
+  colorsWorkerRef: React.MutableRefObject<Worker | null>,
+) : void {
+      const atomData = atoms.map(atom => ({
+          id: atom.id,
+          position: [atom.position.x, atom.position.y, atom.position.z],
+          velocity: [atom.velocity.x, atom.velocity.y, atom.velocity.z],
+          mass: atom.mass,
+          originalColor: atom.originalColor,
+      }));
+
+      const gravitationalPromise = new Promise<Map<string, THREE.Vector3>>((resolve) => {
+          gravitationalWorkerRef.current?.postMessage({ atoms: atomData, G });
+          gravitationalWorkerRef.current!.onmessage = ({ data }: MessageEvent) => {
+              const forces = new Map(
+                  Object.entries(data as Record<string, [number, number, number]>).map(([id, force]) => [id, new THREE.Vector3(...force)])
+              );
+              resolve(forces);
+          };
+      });
+
+      const neighborsPromise = new Promise<Map<string, Atom[]>>((resolve) => {
+          neighborsWorkerRef.current?.postMessage({ atoms: atomData, cutoff });
+          neighborsWorkerRef.current!.onmessage = ({ data }: MessageEvent) => {
+              const neighbors = new Map(
+                  Object.entries(data).map(([id, neighborIds]) => [
+                      id,
+                      (neighborIds as string[]).map((neighborId: string) => atoms.find(atom => atom.id === neighborId)!),
+                  ])
+              );
+              resolve(neighbors);
+          };
+      });
+
+      Promise.all([gravitationalPromise, neighborsPromise])
+          .then(([gravitationalForces, neighbors]) => {
+              const neighborsData = Array.from(neighbors.entries()).map(([id, neighbors]) => ({
+                  id,
+                  neighbors: neighbors.map(neighbor => neighbor.id),
+              }));
+
+              // Promesa para calcular fuerzas locales
+              const localForcesPromise = new Promise<Map<string, THREE.Vector3>>((resolve) => {
+                  localForcesWorkerRef.current?.postMessage({
+                      atoms: atomData,
+                      neighbors: neighborsData,
+                      springConstant,
+                      rotationalConstant,
+                  });
+                  localForcesWorkerRef.current!.onmessage = ({ data }: MessageEvent) => {
+                      const forces = new Map(
+                          Object.entries(data as Record<string, [number, number, number]>).map(([id, force]) => [id, new THREE.Vector3(...force)])
+                      );
+                      resolve(forces);
+                  };
+              });
+
+              // Promesa para calcular colores
+              const colorsPromise = new Promise<Map<string, string>>((resolve) => {
+                  colorsWorkerRef.current?.postMessage({ atoms: atomData, neighbors: neighborsData });
+                  colorsWorkerRef.current!.onmessage = ({ data }: MessageEvent) => {
+                      const colors = new Map(
+                          Object.entries(data as Record<string, string>)
+                      );
+                      resolve(colors);
+                  };
+              });
+
+              return Promise.all([localForcesPromise, colorsPromise]).then(([localForces, colors]) => ({
+                  gravitationalForces,
+                  localForces,
+                  colors,
+              }));
+          })
+          .then(({ gravitationalForces, localForces, colors }) => {
+              updateAtomsByForces(
+                  atoms,
+                  gravitationalForces,
+                  localForces,
+                  colors,
+                  deltaTime
+              )
+          })
+          .catch(error => console.error('Simulation error:', error));
 }

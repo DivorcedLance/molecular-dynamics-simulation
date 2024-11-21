@@ -68,15 +68,4 @@ export class Atom {
         // Restablecer fuerza
         this.force.set(0, 0, 0);
     }
-
-    // Método para actualizar la posición y velocidad en cada paso del tiempo
-    update(globalForce = new THREE.Vector3(), localForce = new THREE.Vector3(), newColor = this.color, deltaTime = 0.016) {
-        const totalForce = globalForce.clone().add(localForce);
-        const acceleration = totalForce.clone().divideScalar(this.mass);
-    
-        this.velocity.add(acceleration.multiplyScalar(deltaTime));
-        this.position.add(this.velocity.clone().multiplyScalar(deltaTime));
-    
-        this.color = newColor;
-    }
 }
