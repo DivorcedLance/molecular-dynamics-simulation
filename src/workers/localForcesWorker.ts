@@ -34,36 +34,41 @@ self.onmessage = (event: MessageEvent<MessageData>) => {
         const atom = atomMap.get(id);
         if (!atom) return;
 
+        const atomPosition = new THREE.Vector3(...atom.position);
         const force = new THREE.Vector3();
 
         neighbors.forEach(neighborId => {
             const neighbor = atomMap.get(neighborId);
             if (!neighbor) return;
 
-            // Vibrational force
+            const neighborPosition = new THREE.Vector3(...neighbor.position);
+
+            // Vibrational force (spring force)
             const restLength = 1; // Rest length of the spring
-            const posA = new THREE.Vector3(...atom.position);
-            const posB = new THREE.Vector3(...neighbor.position);
-            const displacement = posA.distanceTo(posB) - restLength;
-            const springForce = new THREE.Vector3()
-                .subVectors(posB, posA)
-                .normalize()
-                .multiplyScalar(-springConstant * displacement);
+            const displacement = neighborPosition.distanceTo(atomPosition) - restLength;
+            const forceDirection = new THREE.Vector3()
+                .subVectors(neighborPosition, atomPosition)
+                .normalize();
+            const vibrationalForce = forceDirection.multiplyScalar(-springConstant * displacement);
 
-            force.add(springForce);
+            // Add vibrational force
+            force.add(vibrationalForce);
 
-            // Rotational force (simplified)
-            const rotationForce = new THREE.Vector3(
-                -(posB.y - posA.y),
-                posB.x - posA.x,
+            // Rotational force
+            const relativePosition = new THREE.Vector3()
+                .subVectors(neighborPosition, atomPosition);
+            const perpendicularForce = new THREE.Vector3(
+                -relativePosition.y,
+                relativePosition.x,
                 0
-            )
-                .normalize()
-                .multiplyScalar(rotationalConstant);
+            ).normalize();
+            const rotationalForce = perpendicularForce.multiplyScalar(rotationalConstant);
 
-            force.add(rotationForce);
+            // Add rotational force
+            force.add(rotationalForce);
         });
 
+        // Store the calculated force for the current atom
         forces[id] = [force.x, force.y, force.z];
     });
 

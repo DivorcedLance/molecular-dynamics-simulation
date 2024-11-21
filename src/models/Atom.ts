@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { v4 as uuidv4 } from 'uuid'; // Usaremos UUID para generar IDs únicos
 
 // src/models/Atom.ts
-
 export class Atom {
     id: string;
     position: THREE.Vector3;
@@ -25,7 +24,7 @@ export class Atom {
     }
 
     // Fuerza vibracional (resorte)
-    calculateVibrationalForce(other: Atom, springConstant: number) {
+    applyVibrationalForce(other: Atom, springConstant: number) {
         const restLength = 1; // Longitud de equilibrio del "resorte"
         const displacement = this.position.distanceTo(other.position) - restLength;
         const forceDirection = new THREE.Vector3().subVectors(other.position, this.position).normalize();
@@ -34,15 +33,31 @@ export class Atom {
     }
 
     // Fuerza rotacional (simplificada)
-    calculateRotationalForce(other: Atom, rotationalConstant: number) {
+    applyRotationalForce(other: Atom, rotationalConstant: number) {
         const displacement = new THREE.Vector3().subVectors(other.position, this.position);
         const perpendicularForce = new THREE.Vector3(-displacement.y, displacement.x, 0).normalize();
         const force = perpendicularForce.multiplyScalar(rotationalConstant);
         this.force.add(force);
     }
 
+    // Método para actualizar la lista de vecinos y sincronizar colores
+    updateNeighborList(atoms: Atom[], cutoff: number) {
+        this.neighbors = atoms.filter(other =>
+            other !== this && this.position.distanceTo(other.position) <= cutoff
+        );
+
+        // Sincroniza colores con vecinos
+        if (this.neighbors.length > 0) {
+            const mainColor = this.neighbors[0].color; // Usa el color del primer vecino
+            this.color = mainColor;
+            this.neighbors.forEach(neighbor => (neighbor.color = mainColor));
+        } else {
+            this.color = this.originalColor;
+        }
+    }
+
     // Método para actualizar la posición y velocidad en cada paso del tiempo
-    updateByDelta(deltaTime: number) {
+    updatePosVelByDelta(deltaTime: number) {
         // Calcular aceleración
         const acceleration = this.force.clone().divideScalar(this.mass);
     
@@ -63,42 +78,5 @@ export class Atom {
         this.position.add(this.velocity.clone().multiplyScalar(deltaTime));
     
         this.color = newColor;
-        }
-
-    // Método para actualizar la lista de vecinos y sincronizar colores
-    updateNeighborList(atoms: Atom[], cutoff: number) {
-        this.neighbors = atoms.filter(other =>
-            other !== this && this.position.distanceTo(other.position) <= cutoff
-        );
-
-        // Sincroniza colores con vecinos
-        if (this.neighbors.length > 0) {
-            const mainColor = this.neighbors[0].color; // Usa el color del primer vecino
-            this.color = mainColor;
-            this.neighbors.forEach(neighbor => (neighbor.color = mainColor));
-        } else {
-            this.color = this.originalColor;
-        }
-    }
-}
-
-
-export function calculateLongRangeForces(atoms: Atom[], G: number) {
-    const MIN_DISTANCE = 0.2; // Evitar singularidades
-
-    for (let i = 0; i < atoms.length; i++) {
-        for (let j = i + 1; j < atoms.length; j++) {
-            const displacement = new THREE.Vector3().subVectors(atoms[j].position, atoms[i].position);
-            const r = Math.max(displacement.length(), MIN_DISTANCE);
-
-            // Fuerza gravitacional
-            const forceMagnitude = (G * atoms[i].mass * atoms[j].mass) / (r * r);
-            const forceDirection = displacement.normalize();
-
-            // Aplicar fuerza a ambos átomos
-            const force = forceDirection.multiplyScalar(forceMagnitude);
-            atoms[i].force.add(force);
-            atoms[j].force.add(force.negate());
-        }
     }
 }

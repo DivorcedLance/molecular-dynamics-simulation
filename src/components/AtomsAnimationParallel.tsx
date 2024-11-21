@@ -6,36 +6,15 @@ import GravitationalWorker from '../workers/gravitationalWorker?worker';
 import NeighborsWorker from '../workers/neighborsWorker?worker';
 import LocalForcesWorker from '../workers/localForcesWorker?worker';
 import ColorsWorker from '../workers/colorWorker?worker';
-import { updateAtoms } from '../lib/atomFunctions';
+import { createAtoms, updateAtomsParallel } from '../lib/atomFunctions';
+import AtomComponent from '../components/AtomComponent';
 
-const AtomComponent = ({ atom }: { atom: Atom }) => {
-    const meshRef = useRef<THREE.Mesh>(null);
+const AtomsAnimationParallel = ({ isRunning, atomCount, seed }: { isRunning: boolean, atomCount: number, seed: number }) => {
 
-    useFrame(() => {
-        if (meshRef.current) {
-            meshRef.current.position.copy(atom.position);
-        }
-    });
-
-    useEffect(() => {
-        if (meshRef.current) {
-            (meshRef.current.material as THREE.MeshStandardMaterial).color.set(atom.color);
-        }
-    }, [atom.color]);
-
-    return (
-        <mesh ref={meshRef}>
-            <sphereGeometry args={[0.1, 16, 16]} />
-            <meshStandardMaterial />
-        </mesh>
-    );
-};
-
-const AtomsAnimationParallel = ({ isRunning }: { isRunning: boolean }) => {
-    const cutoff = 0.5;
-    const springConstant = 0.5;
-    const rotationalConstant = 0.1;
-    const G = 6.67430e4;
+    const cutoff = 0.5; // Radio de vecinos
+    const springConstant = 0.5; // Constante del resorte
+    const rotationalConstant = 0.1; // Constante rotacional
+    const G = 6.67430e4; // Constante gravitacional
 
     const [atoms, setAtoms] = useState<Atom[]>([]);
     const gravitationalWorkerRef = useRef<Worker | null>(null);
@@ -44,25 +23,10 @@ const AtomsAnimationParallel = ({ isRunning }: { isRunning: boolean }) => {
     const colorsWorkerRef = useRef<Worker | null>(null);
 
     useEffect(() => {
-        const initAtoms = () => {
-            const atomCount = 30;
-            const newAtoms: Atom[] = [];
-            for (let i = 0; i < atomCount; i++) {
-                newAtoms.push(
-                    new Atom(
-                        new THREE.Vector3((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4, (Math.random() - 0.5) * 4),
-                        new THREE.Vector3((Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1, (Math.random() - 0.5) * 0.1),
-                        Math.random() * 5 + 1,
-                        `hsl(${Math.random() * 360}, 100%, 50%)`
-                    )
-                );
-            }
-            console.log(newAtoms);
-            setAtoms(newAtoms);
-        };
+        setAtoms(createAtoms(atomCount, 4, 0.1, seed))
+    }, [atomCount, seed]);
 
-        initAtoms();
-
+    useEffect(() => {
         gravitationalWorkerRef.current = new GravitationalWorker();
         neighborsWorkerRef.current = new NeighborsWorker();
         localForcesWorkerRef.current = new LocalForcesWorker();
@@ -152,7 +116,7 @@ const AtomsAnimationParallel = ({ isRunning }: { isRunning: boolean }) => {
                     }));
                 })
                 .then(({ gravitationalForces, localForces, colors }) => {
-                    updateAtoms(
+                    updateAtomsParallel(
                         atoms,
                         gravitationalForces,
                         localForces,
