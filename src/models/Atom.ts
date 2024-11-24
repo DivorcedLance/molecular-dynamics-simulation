@@ -1,58 +1,87 @@
-import * as THREE from 'three';
-import { v4 as uuidv4 } from 'uuid'; // Usaremos UUID para generar IDs únicos
-
 // src/models/Atom.ts
-export class Atom {
-    id: string;
-    position: THREE.Vector3;
-    velocity: THREE.Vector3;
-    mass: number;
-    force: THREE.Vector3;
-    neighbors: Atom[] = [];
-    color: string; // Color del átomo
-    originalColor: string; // Color original del átomo
+import * as THREE from 'three';
+import { v4 as uuidv4 } from 'uuid'; // Para IDs únicos
 
-    constructor(position = new THREE.Vector3(), velocity = new THREE.Vector3(), mass = 1, color = '#ffffff') {
+export class Atom {
+    id: string; // Identificador único
+    position: THREE.Vector3; // Posición en el espacio (x, y, z)
+    velocity: THREE.Vector3; // Velocidad (v_x, v_y, v_z)
+    force: THREE.Vector3; // Fuerza acumulada (F_x, F_y, F_z)
+    mass: number; // Masa (m)
+    charge: number; // Carga eléctrica (q)
+    color: string; // Color del átomo
+    originalColor: string; // Color del átomo
+    bonds: Atom[] = []; // Enlaces químicos (neighbors por enlace)
+
+    constructor(
+        position = new THREE.Vector3(),
+        velocity = new THREE.Vector3(),
+        mass = 1,
+        charge = 0,
+        originalColor = '#ffffff',
+    ) {
         this.id = uuidv4(); // Generar un ID único
         this.position = position;
         this.velocity = velocity;
-        this.mass = mass;
         this.force = new THREE.Vector3();
-        this.neighbors = [];
-        this.color = color;
-        this.originalColor = color;
+        this.mass = mass;
+        this.charge = charge;
+        this.color = originalColor;
+        this.originalColor = originalColor;
+        this.bonds = []; // Inicializar lista de enlaces
     }
 
-    // Fuerza vibracional (resorte)
-    applyVibrationalForce(other: Atom, springConstant: number) {
-        const restLength = 1; // Longitud de equilibrio del "resorte"
-        const displacement = this.position.distanceTo(other.position) - restLength;
-        const forceDirection = new THREE.Vector3().subVectors(other.position, this.position).normalize();
-        const force = forceDirection.multiplyScalar(-springConstant * displacement);
-        this.force.add(force);
+    // Método para agregar un enlace químico
+    addBond(atom: Atom) {
+        if (!this.bonds.includes(atom)) {
+            this.bonds.push(atom);
+            atom.addBond(this); // Relación bidireccional
+        }
     }
 
-    // Fuerza rotacional (simplificada)
-    applyRotationalForce(other: Atom, rotationalConstant: number) {
-        const displacement = new THREE.Vector3().subVectors(other.position, this.position);
-        const perpendicularForce = new THREE.Vector3(-displacement.y, displacement.x, 0).normalize();
-        const force = perpendicularForce.multiplyScalar(rotationalConstant);
-        this.force.add(force);
+    // Fuerzas vibratorias (enlaces químicos)
+    applyVibrationalForce(springConstant: number) {
+        const processedPairs = new Set<string>(); // Rastrear pares procesados
+
+        this.bonds.forEach(other => {
+            // Crear un identificador único para cada par
+            const pairKey = [this.id, other.id].sort().join('-');
+
+            // Evitar procesar pares duplicados
+            if (processedPairs.has(pairKey)) {
+                return;
+            }
+            processedPairs.add(pairKey);
+
+            // Calcular la fuerza vibratoria
+            const restLength = 1; // Longitud de equilibrio
+            const displacement = this.position.distanceTo(other.position) - restLength;
+            const forceDirection = new THREE.Vector3()
+                .subVectors(other.position, this.position)
+                .normalize();
+            const force = forceDirection.multiplyScalar(springConstant * displacement);
+
+            // Aplicar fuerzas a ambos átomos
+            this.force.add(force);
+            other.force.add(force.clone().negate()); // Acción-reacción
+        });
     }
 
-    // Método para actualizar la lista de vecinos y sincronizar colores
-    updateNeighborList(atoms: Atom[], cutoff: number) {
-        this.neighbors = atoms.filter(other =>
-            other !== this && this.position.distanceTo(other.position) <= cutoff
-        );
-
-        // Sincroniza colores con vecinos
-        if (this.neighbors.length > 0) {
-            const mainColor = this.neighbors[0].color; // Usa el color del primer vecino
-            this.color = mainColor;
-            this.neighbors.forEach(neighbor => (neighbor.color = mainColor));
-        } else {
-            this.color = this.originalColor;
+    // Fuerzas rotacionales (enlaces con ángulos)
+    applyRotationalForce(rotationalConstant: number) {
+        for (let i = 0; i < this.bonds.length; i++) {
+            for (let j = i + 1; j < this.bonds.length; j++) {
+                const atom1 = this.bonds[i];
+                const atom2 = this.bonds[j];
+                const vec1 = new THREE.Vector3().subVectors(atom1.position, this.position);
+                const vec2 = new THREE.Vector3().subVectors(atom2.position, this.position);
+                const angle = vec1.angleTo(vec2); // Ángulo entre los enlaces
+                const torque = rotationalConstant * (Math.PI / 2 - angle); // Ajustar hacia el ángulo de equilibrio
+                const perpendicularForce1 = vec1.clone().cross(new THREE.Vector3(0, 0, 1)).normalize().multiplyScalar(torque);
+                const perpendicularForce2 = vec2.clone().cross(new THREE.Vector3(0, 0, -1)).normalize().multiplyScalar(torque);
+                this.force.add(perpendicularForce1);
+                this.force.add(perpendicularForce2);
+            }
         }
     }
 
@@ -60,11 +89,11 @@ export class Atom {
     updatePosVelByDelta(deltaTime: number) {
         // Calcular aceleración
         const acceleration = this.force.clone().divideScalar(this.mass);
-    
+
         // Actualizar velocidad y posición
         this.velocity.add(acceleration.multiplyScalar(deltaTime));
         this.position.add(this.velocity.clone().multiplyScalar(deltaTime));
-    
+
         // Restablecer fuerza
         this.force.set(0, 0, 0);
     }

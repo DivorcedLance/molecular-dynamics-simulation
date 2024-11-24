@@ -1,43 +1,39 @@
-import * as THREE from 'three';
-
 interface AtomData {
-    id: string;
-    position: [number, number, number];
+  id: string;
+  position: [number, number, number];
 }
 
-interface MessageData {
-    atoms: AtomData[];
-    cutoff: number;
+interface NeighborMessageData {
+  atoms: AtomData[];
+  cutoff: number;
 }
 
-interface NeighborsData {
-    [id: string]: string[];
+interface NeighborResponseData {
+  [id: string]: string[];
 }
 
-self.onmessage = (event: MessageEvent<MessageData>) => {
-    const { atoms, cutoff } = event.data;
+self.onmessage = (event: MessageEvent<NeighborMessageData>) => {
+  const { atoms, cutoff } = event.data;
 
-    const neighbors: NeighborsData = {};
+  const neighborsMap: NeighborResponseData = {};
 
-    atoms.forEach(atomA => {
-        const atomNeighbors: string[] = [];
-        const posA = new THREE.Vector3(...atomA.position);
+  for (const atom of atoms) {
+      const neighbors = atoms.filter((other) => {
+          if (other.id === atom.id) return false;
 
-        atoms.forEach(atomB => {
-            if (atomA.id !== atomB.id) {
-                const posB = new THREE.Vector3(...atomB.position);
-                const distance = posA.distanceTo(posB);
+          const distance = Math.sqrt(
+              (atom.position[0] - other.position[0]) ** 2 +
+              (atom.position[1] - other.position[1]) ** 2 +
+              (atom.position[2] - other.position[2]) ** 2
+          );
 
-                if (distance <= cutoff) {
-                    atomNeighbors.push(atomB.id);
-                }
-            }
-        });
+          return distance <= cutoff;
+      }).map(neighbor => neighbor.id);
 
-        neighbors[atomA.id] = atomNeighbors;
-    });
+      neighborsMap[atom.id] = neighbors;
+  }
 
-    postMessage(neighbors);
+  postMessage(neighborsMap);
 };
 
 export {};

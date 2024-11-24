@@ -2,15 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { AtomAnimationConfig } from '../types';
 import { Atom } from '../models/Atom';
-import { createAtoms, updateAtomsParallel } from '../lib/atomFunctions';
-import AtomComponent from '../components/AtomComponent';
+import { createAtoms, updateAtomsSequential2 } from '../lib/atomFunctions';
+import AtomComponent from './AtomComponent';
 
 import ShortRangeForcesWorker from '../workers/shortRangeForcesWorker?worker';
 import NeighborsWorker from '../workers/neighborsWorker?worker';
 import LongRangeForcesWorker from '../workers/longRangeForcesWorker?worker';
 import ColorsWorker from '../workers/colorWorker?worker';
 
-const AtomsAnimationParallel = ({ isRunning, atomCount, seed, config }: { isRunning: boolean, atomCount: number, seed: number, config: AtomAnimationConfig }) => {
+const AtomsAnimationSequential = ({ isRunning, atomCount, seed, config }: { isRunning: boolean, atomCount: number, seed: number, config: AtomAnimationConfig }) => {
     const [atoms, setAtoms] = useState<Atom[]>([]);
 
     const shortRangeForcesWorkerRef = useRef<Worker | null>(null);
@@ -39,7 +39,7 @@ const AtomsAnimationParallel = ({ isRunning, atomCount, seed, config }: { isRunn
     useFrame(({ clock }) => {
         if (isRunning) {
             const deltaTime = clock.getDelta();
-            updateAtomsParallel(
+            updateAtomsSequential2(
                 atoms,
                 deltaTime,
                 config.cutoff,
@@ -64,4 +64,4 @@ const AtomsAnimationParallel = ({ isRunning, atomCount, seed, config }: { isRunn
     );
 };
 
-export default AtomsAnimationParallel;
+export default AtomsAnimationSequential;

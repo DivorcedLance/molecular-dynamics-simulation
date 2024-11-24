@@ -3,22 +3,25 @@ import { OrbitControls } from '@react-three/drei';
 import { useState } from 'react';
 import { FaPlay, FaPause, FaSyncAlt } from 'react-icons/fa';
 
-import AtomsAnimation from '../components/AtomsAnimation';
+// import AtomsAnimation from '../components/AtomsAnimation';
 import AtomsAnimationParallel from '../components/AtomsAnimationParallel';
+import AtomsAnimationSequential from '../components/AtomsAnimationSequential';
 import { generateRandomSeed } from '../lib/randomUtils';
 import { AtomAnimationConfig } from '../types';
 
 const MolecularSimulation = () => {
     const [isRunning, setIsRunning] = useState(false);
-    const [atomCount, setAtomCount] = useState(50);
+    const [atomCount, setAtomCount] = useState(5);
     const [seed, setSeed] = useState(generateRandomSeed());
     const [config] = useState({
-        "cutoff": 0.5,
-        "springConstant": 0.5,
-        "rotationalConstant": 0.1,
-        "G": 6.67430e3,
-        "positionDispersion": 4,
-        "velocityDispersion": 0.1
+        "cutoff": 1,
+        "springConstant": 100,
+        "rotationalConstant": 1,
+        "G": 6.67430e-11,
+        "k": parseFloat("-8.9875517873681764e4"),
+        "positionDispersion": 3,
+        "velocityDispersion": 0,
+        "maxBondsPerAtom": 2,
     } as AtomAnimationConfig);
 
     return (
@@ -66,7 +69,7 @@ const MolecularSimulation = () => {
                     <Canvas className="md:h-full">
                         <ambientLight intensity={0.5} />
                         <pointLight position={[10, 10, 10]} />
-                        <AtomsAnimation isRunning={isRunning} atomCount={atomCount} seed={seed} config={config}/>
+                        <AtomsAnimationSequential isRunning={isRunning} atomCount={atomCount} seed={seed} config={config}/>
                         <OrbitControls />
                     </Canvas>
                 </div>

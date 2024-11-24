@@ -3,84 +3,50 @@ interface AtomData {
   originalColor: string;
 }
 
-interface NeighborData {
-  id: string;
-  neighbors: string[];
+interface NeighborListData {
+  [id: string]: string[];
 }
 
-interface MessageData {
+interface ColorWorkerMessageData {
   atoms: AtomData[];
-  neighbors: NeighborData[];
+  neighbors: NeighborListData;
 }
 
-interface ColorMap {
+interface ColorResponseData {
   [id: string]: string;
 }
 
-self.onmessage = (event: MessageEvent<MessageData>) => {
+self.onmessage = (event: MessageEvent<ColorWorkerMessageData>) => {
   const { atoms, neighbors } = event.data;
 
-  // Crear un mapa auxiliar para buscar átomos por id
-  const atomMap = new Map<string, AtomData>(
-    atoms.map(atom => [atom.id, atom])
-  );
-
-  // Mapa para almacenar los colores asignados
-  const colorMap: ColorMap = {};
-
-  // Set para rastrear qué átomos ya se han procesado
+  // Crear un mapa para rastrear átomos procesados
   const processed = new Set<string>();
+  const colors: ColorResponseData = {};
 
-  // Función para asignar color a un vecindario
-  function assignColorToNeighborhood(startId: string) {
-    const stack = [startId];
-    const visited = new Set<string>();
+  // Iterar sobre los átomos
+  for (const atom of atoms) {
+      const neighborIds = neighbors[atom.id] || [];
 
-    let colorToAssign: string | undefined;
+      if (neighborIds.length === 0) {
+          // Si no tiene vecinos, asignar su color original
+          colors[atom.id] = atom.originalColor;
+      } else {
+          // Si no se ha procesado este átomo aún
+          if (!processed.has(atom.id)) {
+              // Tomar el color del primer vecino (si existe)
+              const sharedColor = colors[neighborIds[0]] || atom.originalColor;
 
-    while (stack.length > 0) {
-      const currentId = stack.pop()!;
-      if (visited.has(currentId)) continue;
-
-      visited.add(currentId);
-
-      const currentAtom = atomMap.get(currentId);
-      if (!currentAtom) continue;
-
-      if (!colorToAssign) {
-        colorToAssign = currentAtom.originalColor;
+              // Aplicar el color a este átomo y a todos sus vecinos
+              [atom.id, ...neighborIds].forEach(neighborId => {
+                  colors[neighborId] = sharedColor;
+                  processed.add(neighborId); // Marcar como procesado
+              });
+          }
       }
-
-      const currentNeighbors = neighbors.find(n => n.id === currentId)?.neighbors || [];
-      for (const neighbor of currentNeighbors) {
-        if (!visited.has(neighbor)) {
-          stack.push(neighbor);
-        }
-      }
-    }
-
-    visited.forEach(atomId => {
-      colorMap[atomId] = colorToAssign!;
-      processed.add(atomId);
-    });
   }
 
-  // Procesar cada átomo en los vecindarios
-  neighbors.forEach(({ id }) => {
-    if (!processed.has(id)) {
-      assignColorToNeighborhood(id);
-    }
-  });
-
-  // Asignar el color original a los átomos que no tienen vecindario
-  atoms.forEach(atom => {
-    if (!colorMap[atom.id]) {
-      colorMap[atom.id] = atom.originalColor;
-    }
-  });
-
-  // Enviar el resultado al hilo principal
-  postMessage(colorMap);
+  // Enviar el resultado de colores de vuelta al hilo principal
+  postMessage(colors);
 };
 
 export {};

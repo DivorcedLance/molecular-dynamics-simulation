@@ -3,197 +3,508 @@ import * as THREE from "three";
 import { Atom } from "../models/Atom";
 import { seedRandom } from "./randomUtils";
 
-export function createAtoms(atomCount: number, positionDispersion: number, velocityDispersion: number, seed: number): Atom[] {
-  const colors = [
-    "#FF5733", "#33FF57", "#3357FF", "#F7DC6F", "#C70039",
-    "#900C3F", "#581845", "#FFC300", "#DAF7A6", "#FF33A1",
-    "#33FFF9", "#9933FF", "#F933FF", "#33FF77", "#77FF33",
-    "#FFD700", "#FFA07A", "#20B2AA", "#87CEFA", "#778899",
-    "#00FA9A", "#48D1CC", "#FF4500", "#DC143C", "#8B0000",
-    "#FF6347", "#7B68EE", "#00BFFF", "#4169E1", "#32CD32",
-    "#FF1493", "#FF69B4", "#9400D3", "#8A2BE2", "#A52A2A",
-    "#5F9EA0", "#4682B4", "#66CDAA", "#FF8C00", "#8B4513",
-    "#FA8072", "#9932CC", "#2E8B57", "#BDB76B", "#556B2F",
-    "#D2691E", "#FFB6C1", "#FF69B4", "#CD5C5C", "#E9967A"
-  ];
-
-  const random = seedRandom(seed);
-  const shuffledColors = [...colors].sort(() => random() - 0.5);
-
-  const newAtoms: Atom[] = [];
-
-  for (let i = 0; i < atomCount; i++) {
-    const position = new THREE.Vector3(
+// Crear átomos con enlaces químicos predefinidos
+export function createAtoms(
+    atomCount: number,
+    positionDispersion: number,
+    velocityDispersion: number,
+    seed: number,
+    maxBondsPerAtom: number
+  ): Atom[] {
+    const random = seedRandom(seed);
+  
+    // Colores predefinidos para los átomos
+    const colors = [
+      "#FF5733", "#33FF57", "#3357FF", "#F7DC6F", "#C70039",
+      "#900C3F", "#581845", "#FFC300", "#DAF7A6", "#FF33A1",
+      "#33FFF9", "#9933FF", "#F933FF", "#33FF77", "#77FF33",
+      "#FFD700", "#FFA07A", "#20B2AA", "#87CEFA", "#778899",
+      "#00FA9A", "#48D1CC", "#FF4500", "#DC143C", "#8B0000",
+    ];
+    const shuffledColors = [...colors].sort(() => random() - 0.5);
+  
+    const newAtoms: Atom[] = [];
+  
+    // Crear átomos con las propiedades iniciales
+    for (let i = 0; i < atomCount; i++) {
+      const position = new THREE.Vector3(
         (random() - 0.5) * positionDispersion,
         (random() - 0.5) * positionDispersion,
         (random() - 0.5) * positionDispersion
-    );
-    const velocity = new THREE.Vector3(
+      );
+      const velocity = new THREE.Vector3(
         (random() - 0.5) * velocityDispersion,
         (random() - 0.5) * velocityDispersion,
         (random() - 0.5) * velocityDispersion
-    );
-    const mass = random() * 5 + 1;
-    const color = shuffledColors[i % shuffledColors.length];
-    newAtoms.push(new Atom(position, velocity, mass, color));
+      );
+      const mass = random() * 5 + 1; // Masa aleatoria entre 1 y 6
+      const charge = (random() - 0.5) * 2; // Carga entre -1 y 1
+      const originalColor = shuffledColors[i % shuffledColors.length];
+  
+      // Crear un nuevo átomo usando el constructor actualizado
+      const atom = new Atom(position, velocity, mass, charge, originalColor);
+  
+      newAtoms.push(atom);
+    }
+  // Asignar enlaces químicos (bonds) de manera segura
+  for (const atom of newAtoms) {
+    let attempts = 0; // Contador para evitar bucles infinitos
+
+    while (atom.bonds.length < maxBondsPerAtom) {
+        const potentialNeighbor = newAtoms[Math.floor(random() * newAtoms.length)];
+
+        // Verificar si el vecino es válido
+        if (
+            potentialNeighbor !== atom && // No puede enlazarse consigo mismo
+            !atom.bonds.includes(potentialNeighbor) && // No puede enlazarse repetidamente
+            potentialNeighbor.bonds.length < maxBondsPerAtom // El vecino aún puede aceptar más enlaces
+        ) {
+            atom.addBond(potentialNeighbor); // Crear enlace bidireccional
+        }
+
+        attempts++;
+        if (attempts > atomCount * 10) {
+            break;
+        }
+    }
+  }
+  
+    return newAtoms;
   }
 
-  return newAtoms;
+// Calcular lista de vecinos por cutoff
+export function calculateNeighborLists(atoms: Atom[], cutoff: number): Map<string, Atom[]> {
+  const neighborsMap = new Map<string, Atom[]>();
+
+  for (const atom of atoms) {
+    const neighbors = atoms.filter(
+      (other) =>
+        other !== atom &&
+        atom.position.distanceTo(other.position) <= cutoff
+    );
+    neighborsMap.set(atom.id, neighbors);
+  }
+
+  return neighborsMap;
 }
 
-export function applyLongRangeForces(atoms: Atom[], G: number) {
-  const MIN_DISTANCE = 0.2;
+// Función para asignar colores en función del vecindario
+export function updateAtomColorsByNeighborhood(
+  atoms: Atom[],
+  neighborLists: Map<string, Atom[]>
+): void {
+  // Mapa para rastrear vecindarios procesados
+  const processed = new Set<string>();
 
-  for (let i = 0; i < atoms.length; i++) {
-      for (let j = i + 1; j < atoms.length; j++) {
-            const displacement = new THREE.Vector3().subVectors(atoms[j].position, atoms[i].position);
+  atoms.forEach(atom => {
+      const neighbors = neighborLists.get(atom.id) || [];
+      if (neighbors.length === 0) {
+          // Sin vecinos: Volver al color original
+          atom.color = atom.originalColor;
+      } else {
+          // Si no se ha procesado este átomo aún
+          if (!processed.has(atom.id)) {
+              // Tomar el color de uno de los vecinos (el primero de la lista)
+              const sharedColor = neighbors[0].color;
+
+              // Aplicar el color del vecino al átomo y a todos los vecinos
+              [atom, ...neighbors].forEach(neighbor => {
+                  neighbor.color = sharedColor;
+                  processed.add(neighbor.id); // Marcar como procesado
+              });
+          }
+      }
+  });
+}
+
+// Aplicar fuerzas de largo alcance (gravedad y electricidad)
+export function applyLongRangeForces(
+    atoms: Atom[],
+    neighborLists: Map<string, Atom[]>,
+    G: number,
+    k: number
+) {
+    const MIN_DISTANCE = 0.1;
+
+    // Iterar solo sobre cada átomo y sus vecinos de forma ordenada
+    const processedPairs = new Set<string>();
+
+    for (const atom of atoms) {
+        const neighbors = neighborLists.get(atom.id) || [];
+        for (const neighbor of neighbors) {
+            // Generar un identificador único para cada par
+            const pairKey = [atom.id, neighbor.id].sort().join('-');
+
+            // Evitar calcular para pares ya procesados
+            if (processedPairs.has(pairKey)) {
+                continue;
+            }
+            processedPairs.add(pairKey);
+
+            // Calcular el desplazamiento y la distancia
+            const displacement = new THREE.Vector3().subVectors(
+                neighbor.position,
+                atom.position
+            );
             const r = Math.max(displacement.length(), MIN_DISTANCE);
 
             // Fuerza gravitacional
-            const forceMagnitude = (G * atoms[i].mass * atoms[j].mass) / (r * r);
+            const gravitationalForceMagnitude =
+                (G * atom.mass * neighbor.mass) / (r * r);
+
+            // Fuerza electrostática (Ley de Coulomb)
+            const electrostaticForceMagnitude =
+                (k * atom.charge * neighbor.charge) / (r * r);
+
+            // Dirección de la fuerza
             const forceDirection = displacement.normalize();
 
-            // Aplicar fuerza a ambos átomos
-            const force = forceDirection.multiplyScalar(forceMagnitude);
-            atoms[i].force.add(force);
-            atoms[j].force.add(force.negate());
-      }
-  }
-}
+            // Calcular la fuerza total
+            const gravitationalForce = forceDirection.clone().multiplyScalar(gravitationalForceMagnitude);
 
-export function updateAtomsSequential (
+            // La fuerza electrostática debe cambiar de dirección si las cargas son iguales
+            const electrostaticForce = forceDirection.clone().multiplyScalar(electrostaticForceMagnitude);
+
+            // Sumar las fuerzas
+            const totalForce = gravitationalForce.add(electrostaticForce);
+
+            // Aplicar fuerza a ambos átomos
+            atom.force.add(totalForce);
+            neighbor.force.add(totalForce.clone().negate()); // Acción-reacción
+        }
+    }
+}
+  
+export function updateAtomsSequential(
     atoms: Atom[], 
     deltaTime: number, 
     cutoff: number, 
     springConstant: number, 
     rotationalConstant: number, 
-    G: number
-    ): void {
-    // Calcular fuerzas globales (entre todos)
-    applyLongRangeForces(atoms, G);
-
-    // Actualizar listas de vecinos
-    atoms.forEach(atom => atom.updateNeighborList(atoms, cutoff));
-
-    // Calcular fuerzas locales (entre vecinos)
-    atoms.forEach(atom => {
-        atom.neighbors.forEach(neighbor => {
-            atom.applyVibrationalForce(neighbor, springConstant);
-            atom.applyRotationalForce(neighbor, rotationalConstant);
-        });
-    });
-
-    // Actualizar posiciones de los átomos
-    atoms.forEach(atom => atom.updatePosVelByDelta(deltaTime));
-}
-
-// Actualizar posiciones y velocidades
-export function updateAtomsByForces(
-    atoms: Atom[],
-    globalForces: Map<string, THREE.Vector3>,
-    localForces: Map<string, THREE.Vector3>,
-    colors: Map<string, string>,
-    deltaTime: number
+    G: number, 
+    k: number,
 ): void {
-    atoms.forEach(atom => {
-        const globalForce = globalForces.get(atom.id) || new THREE.Vector3();
-        const localForce = localForces.get(atom.id) || new THREE.Vector3();
-        const newColor = colors.get(atom.id) || atom.color;
+    // Calcular fuerzas locales (enlaces químicos)
+  atoms.forEach(atom => {
+    atom.applyVibrationalForce(springConstant);
+    atom.applyRotationalForce(rotationalConstant);
+  });
 
-        atom.force.add(globalForce);
-        atom.force.add(localForce);
-        atom.color = newColor;
-        atom.updatePosVelByDelta(deltaTime);
-    });
+  // Calcular listas de vecinos basadas en el cutoff
+  const neighborLists = calculateNeighborLists(atoms, cutoff);
+
+  // Aplicar fuerzas de largo alcance (gravitacionales y electrostáticas)
+  applyLongRangeForces(atoms, neighborLists, G, k);
+  
+  // Actualizar colores de los átomos basados en el vecindario
+  updateAtomColorsByNeighborhood(atoms, neighborLists);
+
+  // Actualizar posiciones y velocidades de los átomos
+  atoms.forEach(atom => atom.updatePosVelByDelta(deltaTime));
 }
 
-export function updateAtomsParallel(
+interface ForceResponseData {
+    [id: string]: [number, number, number];
+  }
+interface NeighborResponseData {
+    [id: string]: string[];
+}
+interface ColorResponseData {
+    [id: string]: string;
+  }
+
+
+export function updateAtomsSequential2(
     atoms: Atom[],
     deltaTime: number,
     cutoff: number,
     springConstant: number,
     rotationalConstant: number,
     G: number,
-    gravitationalWorkerRef: React.MutableRefObject<Worker | null>,
+    k: number,
+    shortRangeForcesWorkerRef: React.MutableRefObject<Worker | null>,
     neighborsWorkerRef: React.MutableRefObject<Worker | null>,
-    localForcesWorkerRef: React.MutableRefObject<Worker | null>,
-    colorsWorkerRef: React.MutableRefObject<Worker | null>,
-) : void {
-    const atomData = atoms.map(atom => ({
-        id: atom.id,
-        position: [atom.position.x, atom.position.y, atom.position.z],
-        velocity: [atom.velocity.x, atom.velocity.y, atom.velocity.z],
-        mass: atom.mass,
-        originalColor: atom.originalColor,
-    }));
-
-    const gravitationalPromise = new Promise<Map<string, THREE.Vector3>>((resolve) => {
-        gravitationalWorkerRef.current?.postMessage({ atoms: atomData, G });
-        gravitationalWorkerRef.current!.onmessage = ({ data }: MessageEvent) => {
-            const forces = new Map(
-                Object.entries(data as Record<string, [number, number, number]>).map(([id, force]) => [id, new THREE.Vector3(...force)])
-            );
-            resolve(forces);
-        };
-    });
-
-    const neighborsPromise = new Promise<Map<string, Atom[]>>((resolve) => {
-        neighborsWorkerRef.current?.postMessage({ atoms: atomData, cutoff });
-        neighborsWorkerRef.current!.onmessage = ({ data }: MessageEvent) => {
-            const neighbors = new Map(
-                Object.entries(data).map(([id, neighborIds]) => [
-                    id,
-                    (neighborIds as string[]).map((neighborId: string) => atoms.find(atom => atom.id === neighborId)!),
-                ])
-            );
-            resolve(neighbors);
-        };
-    });
-
-    const neighborsDataPromise = neighborsPromise.then(neighbors => {
-        return Array.from(neighbors.entries()).map(([id, neighbors]) => ({
-            id,
-            neighbors: neighbors.map(neighbor => neighbor.id),
+    colorWorkerRef: React.MutableRefObject<Worker | null>,
+    longRangeForcesWorkerRef: React.MutableRefObject<Worker | null>
+  ) {
+    // Crear promesas para sincronizar las operaciones de los workers
+    const getNeighbors = () =>
+      new Promise<NeighborResponseData>((resolve, reject) => {
+        if (neighborsWorkerRef.current) {
+          neighborsWorkerRef.current.onmessage = (event) => resolve(event.data);
+          neighborsWorkerRef.current.onerror = (error) => reject(error);
+          neighborsWorkerRef.current.postMessage({ 
+            atoms: atoms.map((atom) => ({
+                id: atom.id,
+                position: atom.position.toArray(),
+            })),
+            cutoff 
+        });
+        } else {
+          reject(new Error("Neighbors worker no inicializado."));
+        }
+      });
+  
+    const calculateShortRangeForces = () =>
+      new Promise<ForceResponseData>((resolve, reject) => {
+        if (shortRangeForcesWorkerRef.current) {
+          shortRangeForcesWorkerRef.current.onmessage = (event) =>
+            resolve(event.data);
+          shortRangeForcesWorkerRef.current.onerror = (error) => reject(error);
+          shortRangeForcesWorkerRef.current.postMessage({
+            atoms: atoms.map((atom) => ({
+                id: atom.id,
+                position: atom.position.toArray(),
+                bonds: atom.bonds.map((bond) => bond.id),
+            })),
+            springConstant,
+            rotationalConstant,
+          });
+        } else {
+          reject(new Error("Short-range forces worker no inicializado."));
+        }
+      });
+  
+    const updateColors = (neighbors: NeighborResponseData) =>
+      new Promise<ColorResponseData>((resolve, reject) => {
+        if (colorWorkerRef.current) {
+          colorWorkerRef.current.onmessage = (event) => resolve(event.data);
+          colorWorkerRef.current.onerror = (error) => reject(error);
+          colorWorkerRef.current.postMessage({
+            atoms: atoms.map((atom) => ({
+              id: atom.id,
+              originalColor: atom.originalColor,
+            })),
+            neighbors,
+          });
+        } else {
+          reject(new Error("Color worker no inicializado."));
+        }
+      });
+  
+    const calculateLongRangeForces = (neighbors: NeighborResponseData) =>
+      new Promise<ForceResponseData>((resolve, reject) => {
+        if (longRangeForcesWorkerRef.current) {
+          longRangeForcesWorkerRef.current.onmessage = (event) =>
+            resolve(event.data);
+          longRangeForcesWorkerRef.current.onerror = (error) => reject(error);
+          longRangeForcesWorkerRef.current.postMessage({
+            atoms: atoms.map((atom) => ({
+                id: atom.id,
+                position: atom.position.toArray(),
+                mass: atom.mass,
+                charge: atom.charge,
+            })),
+            neighbors: Object.entries(neighbors).map(([id, neighborIds]) => ({
+              id,
+              neighbors: neighborIds,
+            })),
+            G,
+            k,
+          });
+        } else {
+          reject(new Error("Long-range forces worker no inicializado."));
+        }
+      });
+      
+      calculateShortRangeForces()
+      .then((shortRangeForces) =>
+        getNeighbors().then((neighbors) => ({
+          shortRangeForces,
+          neighbors,
+        }))
+      )
+      .then(({ shortRangeForces, neighbors }) =>
+        updateColors(neighbors).then((colors) => ({
+          shortRangeForces,
+          neighbors,
+          colors,
+        }))
+      )
+      .then(({ shortRangeForces, neighbors, colors }) =>
+        calculateLongRangeForces(neighbors).then((longRangeForces) => ({
+          shortRangeForces,
+          colors,
+          longRangeForces,
+        }))
+      )
+      .then(({ shortRangeForces, colors, longRangeForces }) => {
+        // Actualizar posiciones y colores de los átomos
+        atoms.forEach((atom) => {
+          const shortForce = shortRangeForces[atom.id] || [0, 0, 0];
+          const longForce = longRangeForces[atom.id] || [0, 0, 0];
+          const totalForce = [
+            shortForce[0] + longForce[0],
+            shortForce[1] + longForce[1],
+            shortForce[2] + longForce[2],
+          ];
+  
+          // Actualizar posición y velocidad
+          const acceleration = [
+            totalForce[0] / atom.mass,
+            totalForce[1] / atom.mass,
+            totalForce[2] / atom.mass,
+          ];
+  
+          atom.velocity.add(new THREE.Vector3(...acceleration).multiplyScalar(deltaTime));
+          atom.position.add(atom.velocity.clone().multiplyScalar(deltaTime));
+  
+          // Actualizar color
+          atom.color = colors[atom.id] || atom.originalColor;
+        });
+      })
+      .catch((error) => {
+        console.error("Error al procesar los workers:", error);
+      });
+  }
+  
+  export function updateAtomsParallel(
+    atoms: Atom[],
+    deltaTime: number,
+    cutoff: number,
+    springConstant: number,
+    rotationalConstant: number,
+    G: number,
+    k: number,
+    shortRangeForcesWorkerRef: React.MutableRefObject<Worker | null>,
+    neighborsWorkerRef: React.MutableRefObject<Worker | null>,
+    colorWorkerRef: React.MutableRefObject<Worker | null>,
+    longRangeForcesWorkerRef: React.MutableRefObject<Worker | null>
+  ) {
+    const getNeighbors = () =>
+      new Promise<NeighborResponseData>((resolve, reject) => {
+        if (neighborsWorkerRef.current) {
+          neighborsWorkerRef.current.onmessage = (event) => resolve(event.data);
+          neighborsWorkerRef.current.onerror = (error) => reject(error);
+          neighborsWorkerRef.current.postMessage({
+            atoms: atoms.map((atom) => ({
+              id: atom.id,
+              position: atom.position.toArray(),
+            })),
+            cutoff,
+          });
+        } else {
+          reject(new Error("Neighbors worker no inicializado."));
+        }
+      });
+  
+    const calculateShortRangeForces = () =>
+      new Promise<ForceResponseData>((resolve, reject) => {
+        if (shortRangeForcesWorkerRef.current) {
+          shortRangeForcesWorkerRef.current.onmessage = (event) =>
+            resolve(event.data);
+          shortRangeForcesWorkerRef.current.onerror = (error) => reject(error);
+          shortRangeForcesWorkerRef.current.postMessage({
+            atoms: atoms.map((atom) => ({
+              id: atom.id,
+              position: atom.position.toArray(),
+              bonds: atom.bonds.map((bond) => bond.id),
+            })),
+            springConstant,
+            rotationalConstant,
+          });
+        } else {
+          reject(new Error("Short-range forces worker no inicializado."));
+        }
+      });
+  
+    const updateColors = (neighbors: NeighborResponseData) =>
+      new Promise<ColorResponseData>((resolve, reject) => {
+        if (colorWorkerRef.current) {
+          colorWorkerRef.current.onmessage = (event) => resolve(event.data);
+          colorWorkerRef.current.onerror = (error) => reject(error);
+          colorWorkerRef.current.postMessage({
+            atoms: atoms.map((atom) => ({
+              id: atom.id,
+              originalColor: atom.originalColor,
+            })),
+            neighbors,
+          });
+        } else {
+          reject(new Error("Color worker no inicializado."));
+        }
+      });
+  
+    const calculateLongRangeForces = (neighbors: NeighborResponseData) =>
+      new Promise<ForceResponseData>((resolve, reject) => {
+        if (longRangeForcesWorkerRef.current) {
+          longRangeForcesWorkerRef.current.onmessage = (event) =>
+            resolve(event.data);
+          longRangeForcesWorkerRef.current.onerror = (error) => reject(error);
+          longRangeForcesWorkerRef.current.postMessage({
+            atoms: atoms.map((atom) => ({
+              id: atom.id,
+              position: atom.position.toArray(),
+              mass: atom.mass,
+              charge: atom.charge,
+            })),
+            neighbors: Object.entries(neighbors).map(([id, neighborIds]) => ({
+              id,
+              neighbors: neighborIds,
+            })),
+            G,
+            k,
+          });
+        } else {
+          reject(new Error("Long-range forces worker no inicializado."));
+        }
+      });
+  
+    // Ejecutar las operaciones paralelizadas
+    const shortRangePromise = calculateShortRangeForces();
+    const neighborsPromise = getNeighbors();
+  
+    neighborsPromise
+      .then((neighbors) => {
+        // Paralelizar colorWorkerRef y longRangeForcesWorkerRef
+        const colorPromise = updateColors(neighbors);
+        const longRangeForcesPromise = calculateLongRangeForces(neighbors);
+  
+        return Promise.all([colorPromise, longRangeForcesPromise]).then(
+          ([colors, longRangeForces]) => ({
+            neighbors,
+            colors,
+            longRangeForces,
+          })
+        );
+      })
+      .then(({ colors, longRangeForces }) => {
+        // Esperar a que shortRangeForcesWorkerRef termine antes de combinar los resultados
+        return shortRangePromise.then((shortRangeForces) => ({
+          shortRangeForces,
+          longRangeForces,
+          colors,
         }));
-    });
-
-    const localForcesPromise = neighborsDataPromise.then(neighborsData => {
-        return new Promise<Map<string, THREE.Vector3>>((resolve) => {
-            localForcesWorkerRef.current?.postMessage({
-                atoms: atomData,
-                neighbors: neighborsData,
-                springConstant,
-                rotationalConstant,
-            });
-            localForcesWorkerRef.current!.onmessage = ({ data }: MessageEvent) => {
-                const forces = new Map(
-                    Object.entries(data as Record<string, [number, number, number]>).map(([id, force]) => [id, new THREE.Vector3(...force)])
-                );
-                resolve(forces);
-            };
+      })
+      .then(({ shortRangeForces, longRangeForces, colors }) => {
+        // Actualizar posiciones y colores de los átomos
+        atoms.forEach((atom) => {
+          const shortForce = shortRangeForces[atom.id] || [0, 0, 0];
+          const longForce = longRangeForces[atom.id] || [0, 0, 0];
+          const totalForce = [
+            shortForce[0] + longForce[0],
+            shortForce[1] + longForce[1],
+            shortForce[2] + longForce[2],
+          ];
+  
+          // Actualizar posición y velocidad
+          const acceleration = [
+            totalForce[0] / atom.mass,
+            totalForce[1] / atom.mass,
+            totalForce[2] / atom.mass,
+          ];
+  
+          atom.velocity.add(
+            new THREE.Vector3(...acceleration).multiplyScalar(deltaTime)
+          );
+          atom.position.add(atom.velocity.clone().multiplyScalar(deltaTime));
+  
+          // Actualizar color
+          atom.color = colors[atom.id] || atom.originalColor;
         });
-    });
-
-    const colorsPromise = neighborsDataPromise.then(neighborsData => {
-        return new Promise<Map<string, string>>((resolve) => {
-            colorsWorkerRef.current?.postMessage({ atoms: atomData, neighbors: neighborsData });
-            colorsWorkerRef.current!.onmessage = ({ data }: MessageEvent) => {
-                const colors = new Map(Object.entries(data as Record<string, string>));
-                resolve(colors);
-            };
-        });
-    });
-
-    // Paso 3: Combinar todo
-    Promise.all([gravitationalPromise, localForcesPromise, colorsPromise])
-        .then(([gravitationalForces, localForces, colors]) => {
-            updateAtomsByForces(
-                atoms,
-                gravitationalForces,
-                localForces,
-                colors,
-                deltaTime
-            );
-        })
-        .catch(error => console.error('Simulation error:', error));
-}
+      })
+      .catch((error) => {
+        console.error("Error al procesar los workers:", error);
+      });
+  }
+  
